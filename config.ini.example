@@ -1,0 +1,10 @@
+[xmpp]
+converse_jid = test1@xmppdev.example.com
+converse_pass = tsdftsdf
+
+bot_jid = bot1@xmppdev.example.com
+bot_pass = bsdfbsdf
+
+muc_jid = testmuc@conference.xmppdev.example.com
+
+converse_url = https://xmppdev.example.com/converse/
