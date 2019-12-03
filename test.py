@@ -88,8 +88,7 @@ class Test:
         for i in range(count):
             private_messages.append(self.sendPrivateMessage())
             
-        for message in private_messages:
-            self.checkPrivateMessage(message)
+        self.checkPrivateMessages(private_messages)
             
         if self.check_duplicates(private_messages):
             print "  WARNING: duplicate private messages!"
@@ -98,8 +97,7 @@ class Test:
         for i in range(count):
             muc_messages.append(self.sendMucMessage())
             
-        for message in muc_messages:
-            self.checkMucMessage(message)
+        self.checkMucMessages(muc_messages)
             
         if self.check_duplicates(muc_messages):
             print "  WARNING: duplicate muc messages!"
@@ -124,16 +122,14 @@ class Test:
         self.start_nginx()
         
         # private
-        for message in private_messages:
-            self.checkPrivateMessage(message)
+        self.checkPrivateMessages(private_messages)
             
         if self.check_duplicates(private_messages):
             print "  WARNING: duplicate private messages!"
         
         # muc   
-        for message in muc_messages:
-            self.checkMucMessage(message)
-            
+        self.checkMucMessages(muc_messages)
+        
         if self.check_duplicates(muc_messages):
             print "  WARNING: %s duplicate muc messages!" %(self.check_duplicates(muc_messages))
         
@@ -149,13 +145,18 @@ class Test:
         
         return message
     
-    def checkMucMessage(self, message):
-        # muc message
+    def checkMucMessages(self, messages):
         muc_handle = WebDriverWait(self.driver, 1, 0.1).until(
             EC.presence_of_element_located((By.XPATH, "//a[text()='testmuc']"))
         )
         muc_handle.click()
-
+        
+        for message in messages:
+            self.checkMucMessage(message)
+            
+        self.driver.save_screenshot("screenshots/muc.png")
+        
+    def checkMucMessage(self, message):
         try:
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//div[text()='%s']" %(message)))
@@ -163,24 +164,25 @@ class Test:
         except:
             raise Exception("MUC message %s was not received" %(message))
             
-        self.driver.save_screenshot("screenshots/muc.png")
-            
-    def checkPrivateMessage(self, message):
-        # private message
+    def checkPrivateMessages(self, messages):
         user_handle = WebDriverWait(self.driver, 1, 0.1).until(
             EC.presence_of_element_located((By.XPATH, "//span[contains(@class, 'contact-name') and text()='bot1']/../.."))
         )
         user_handle.click()
-
+        
+        for message in messages:
+            self.checkPrivateMessage(message)
+            
+        self.driver.save_screenshot("screenshots/private.png")
+        
+    def checkPrivateMessage(self, message):
         try:
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//div[text()='%s']" %(message)))
             )
         except:
             raise Exception("Private message %s was not received" %(message))
-            
-        self.driver.save_screenshot("screenshots/private.png")
-        
+             
     def check_duplicates(self, messages):
         duplicates = 0
         
