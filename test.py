@@ -5,6 +5,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException
 
 from xmppclient import *
 
@@ -15,7 +16,8 @@ import random
 import ConfigParser
 
 class Test:
-    MAX_DELAY = 10
+    MIN_DELAY = 0
+    MAX_DELAY = 65
     
     def initialize(self):
         config = ConfigParser.RawConfigParser()
@@ -74,7 +76,7 @@ class Test:
         self.start_nginx()
             
     def test_online(self, count = 1):
-        delay = random.randint(0, self.MAX_DELAY)
+        delay = random.randint(self.MIN_DELAY, self.MAX_DELAY)
         print "Testing %s online messages with disconnect delay %i.." %(count, delay)
         
         self.stop_nginx()
@@ -88,22 +90,24 @@ class Test:
         for i in range(count):
             private_messages.append(self.sendPrivateMessage())
             
+        self.sendPrivateMessage('-----')
+            
         self.checkPrivateMessages(private_messages)
             
         if self.check_duplicates(private_messages):
-            print "  WARNING: duplicate private messages!"
+            raise Exception("%s duplicate private messages received" %(self.check_duplicates(private_messages)))
         
         # muc     
         for i in range(count):
             muc_messages.append(self.sendMucMessage())
-            
+        
         self.checkMucMessages(muc_messages)
             
         if self.check_duplicates(muc_messages):
-            print "  WARNING: duplicate muc messages!"
+            raise Exception("%s duplicate muc messages received" %(self.check_duplicates(muc_messages)))
             
     def test_offline(self, count = 1):
-        delay = random.randint(1, self.MAX_DELAY)
+        delay = random.randint(self.MIN_DELAY + 1, self.MAX_DELAY)
         print "Testing %s offline messages with disconnect delay %i.." %(count, delay)
         
         self.stop_nginx()
@@ -115,6 +119,8 @@ class Test:
         for i in range(count):
             private_messages.append(self.sendPrivateMessage())
             
+        self.sendPrivateMessage('-----')
+            
         for i in range(count):
             muc_messages.append(self.sendMucMessage())
         
@@ -125,64 +131,115 @@ class Test:
         self.checkPrivateMessages(private_messages)
             
         if self.check_duplicates(private_messages):
-            print "  WARNING: duplicate private messages!"
+            raise Exception("%s duplicate private messages received" %(self.check_duplicates(private_messages)))
         
-        # muc   
+        # muc
+        #print muc_messages
         self.checkMucMessages(muc_messages)
         
         if self.check_duplicates(muc_messages):
-            print "  WARNING: %s duplicate muc messages!" %(self.check_duplicates(muc_messages))
+            raise Exception("%s duplicate muc messages received" %(self.check_duplicates(muc_messages)))
         
-    def sendPrivateMessage(self):
-        message = uuid.uuid4().hex
+    def sendPrivateMessage(self, message = None):
+        if message is None:
+            message = uuid.uuid4().hex
+            
         self.xmpp_client.message(self.CONVERSE_JID, message)
         
         return message
         
-    def sendMucMessage(self):
-        message = uuid.uuid4().hex
+    def sendMucMessage(self, message = None):
+        if message is None:
+            message = uuid.uuid4().hex
+            
         self.xmpp_client.muc_message(self.MUC, message)
         
         return message
+        
+    def checkPrivateMessages(self, messages):
+        # wait for conversation to be opened
+        self.focusPrivateConversation()
+
+        for i, message in enumerate(messages):
+            # for the first message after reconnection, allow up to 30 seconds
+            wait = 30 if i == 0 else 5
+            self.checkPrivateMessage(message, wait)
+            
+        # converse can randomly jump around windows on reconnection, but we want a proper screenshot
+        self.focusPrivateConversation()
+        self.driver.save_screenshot("screenshots/private.png")
     
     def checkMucMessages(self, messages):
-        muc_handle = WebDriverWait(self.driver, 1, 0.1).until(
-            EC.presence_of_element_located((By.XPATH, "//a[text()='testmuc']"))
-        )
-        muc_handle.click()
-        
-        for message in messages:
+        # wait for conversation to be opened
+        self.focusMucConversation()
+
+        for i, message in enumerate(messages):
             self.checkMucMessage(message)
             
+        # converse can randomly jump around windows on reconnection, but we want a proper screenshot
+        self.focusMucConversation()
         self.driver.save_screenshot("screenshots/muc.png")
-        
-    def checkMucMessage(self, message):
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, "//div[text()='%s']" %(message)))
-            )
-        except:
-            raise Exception("MUC message %s was not received" %(message))
             
-    def checkPrivateMessages(self, messages):
-        user_handle = WebDriverWait(self.driver, 1, 0.1).until(
-            EC.presence_of_element_located((By.XPATH, "//span[contains(@class, 'contact-name') and text()='bot1']/../.."))
+    def focusPrivateConversation(self):
+        succeed = False
+        
+        for i in range(5):
+            try:
+                user_handle = WebDriverWait(self.driver, 1, 0.1).until(
+                    EC.presence_of_element_located((By.XPATH, "//span[contains(@class, 'contact-name') and normalize-space()='bot1']/../.."))
+                )
+                user_handle.click()
+                
+                succeed = True
+                break
+            except StaleElementReferenceException:
+                pass # "The element reference is stale"
+                
+        if not succeed:
+            raise Exception("Could not open private conversation window")
+            
+        WebDriverWait(self.driver, 1, 0.1).until(
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chat-title') and normalize-space()='bot1']"))
         )
-        user_handle.click()
-        
-        for message in messages:
-            self.checkPrivateMessage(message)
             
-        self.driver.save_screenshot("screenshots/private.png")
+    def focusMucConversation(self):
+        succeed = False
         
-    def checkPrivateMessage(self, message):
+        for i in range(5):
+            try:
+                user_handle = WebDriverWait(self.driver, 1, 0.1).until(
+                    EC.presence_of_element_located((By.XPATH, "//a[normalize-space()='testmuc']"))
+                )
+                user_handle.click()
+                
+                succeed = True
+                break
+            except StaleElementReferenceException:
+                pass # "The element reference is stale"
+                
+        if not succeed:
+            raise Exception("Could not open muc conversation window")
+            
+        WebDriverWait(self.driver, 1, 0.1).until(
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chat-title') and normalize-space()='testmuc']"))
+        )
+     
+    def checkPrivateMessage(self, message, wait = 5):
         try:
-            WebDriverWait(self.driver, 10).until(
+            WebDriverWait(self.driver, wait, 0.1).until(
                 EC.presence_of_element_located((By.XPATH, "//div[text()='%s']" %(message)))
             )
         except:
             raise Exception("Private message %s was not received" %(message))
-             
+                
+    def checkMucMessage(self, message, wait = 5):
+        try:
+            WebDriverWait(self.driver, wait, 0.1).until(
+                EC.presence_of_element_located((By.XPATH, "//div[normalize-space()='%s']" %(message)))
+            )
+        except:
+            raise Exception("MUC message %s was not received" %(message))
+                 
     def check_duplicates(self, messages):
         duplicates = 0
         
@@ -205,10 +262,11 @@ test.initialize()
 
 try:
     test.connect()
+    
+    start_count = 1
 
-    # run two iterations, each testing both "online messages" and "offline messages" with a message count of 15
-    for i in range(2):
-        test.test_online(15)
-        test.test_offline(15)
+    for i in range(25):
+        test.test_online(start_count)
+        test.test_offline(start_count + i)
 finally:
     test.cleanup()

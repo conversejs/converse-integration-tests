@@ -30,6 +30,7 @@ Change the configuration to enable MAM by default:
   mod_muc:
     default_room_options:
       mam: true # xmppdev
+      persistent: true # xmppdev
 ```
 
 ## Nginx
@@ -76,7 +77,9 @@ Install Converse.js in `/var/www/converse` and give it the configuration you wan
         websocket_url: "wss://xmppdev.example.com/ws",
         default_domain: "xmppdev.example.com",
         view_mode: "fullscreen",
-        enable_smacks: true
+        enable_smacks: true,
+        archived_messages_page_size: 2, # make it easier to uncover mam paging issues
+        
     };
 
     converse.initialize(props);
