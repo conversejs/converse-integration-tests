@@ -7,6 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
 
+
 from xmppclient import *
 
 from time import sleep
@@ -17,7 +18,7 @@ import ConfigParser
 
 class Test:
     MIN_DELAY = 0
-    MAX_DELAY = 65
+    MAX_DELAY = 5
     
     def initialize(self):
         config = ConfigParser.RawConfigParser()
@@ -31,6 +32,7 @@ class Test:
         self.CONVERSE_URL = config.get('xmpp', 'converse_url')
 
         os.system("sudo /opt/ejabberd-19.09.1/bin/ejabberdctl delete_old_mam_messages all 0")
+        os.system("sudo service nginx start")
         os.system("killall geckodriver")
         os.system("rm screenshots/*.png")
         os.system("rm geckodriver.log")
@@ -56,7 +58,10 @@ class Test:
         jid.send_keys(self.CONVERSE_JID)
         password.send_keys(self.CONVERSE_PASS)
         password.submit()
-
+        
+        self.wait_for_online()
+        
+    def wait_for_online(self):
         status_element = WebDriverWait(self.driver, 5).until(
             EC.presence_of_element_located((By.CLASS_NAME, "xmpp-status"))
         )
@@ -91,20 +96,12 @@ class Test:
             private_messages.append(self.sendPrivateMessage())
             
         self.sendPrivateMessage('-----')
-            
-        self.checkPrivateMessages(private_messages)
-            
-        if self.check_duplicates(private_messages):
-            raise Exception("%s duplicate private messages received" %(self.check_duplicates(private_messages)))
         
         # muc     
         for i in range(count):
             muc_messages.append(self.sendMucMessage())
-        
-        self.checkMucMessages(muc_messages)
-            
-        if self.check_duplicates(muc_messages):
-            raise Exception("%s duplicate muc messages received" %(self.check_duplicates(muc_messages)))
+
+        self.checkMessages(private_messages, muc_messages)
             
     def test_offline(self, count = 1):
         delay = random.randint(self.MIN_DELAY + 1, self.MAX_DELAY)
@@ -127,6 +124,9 @@ class Test:
         sleep(delay / 2)
         self.start_nginx()
         
+        self.checkMessages(private_messages, muc_messages)
+
+    def checkMessages(self, private_messages, muc_messages):
         # private
         self.checkPrivateMessages(private_messages)
             
@@ -134,7 +134,6 @@ class Test:
             raise Exception("%s duplicate private messages received" %(self.check_duplicates(private_messages)))
         
         # muc
-        #print muc_messages
         self.checkMucMessages(muc_messages)
         
         if self.check_duplicates(muc_messages):
@@ -185,21 +184,24 @@ class Test:
         
         for i in range(5):
             try:
+                # as of converse 6, all roster entries are duplicated in the DOM; once for online, once for offline..?!
+                # make sure to select the div with class="roster-group" and *NOT* the one with class="roster-group hidden"
                 user_handle = WebDriverWait(self.driver, 1, 0.1).until(
-                    EC.presence_of_element_located((By.XPATH, "//span[contains(@class, 'contact-name') and normalize-space()='bot1']/../.."))
+                    EC.presence_of_element_located((By.XPATH, "//div[@class='roster-group']//span[contains(@class, 'contact-name') and normalize-space()='bot1']"))
                 )
+                
                 user_handle.click()
                 
                 succeed = True
                 break
-            except StaleElementReferenceException:
+            except (StaleElementReferenceException, ):
                 pass # "The element reference is stale"
                 
         if not succeed:
             raise Exception("Could not open private conversation window")
             
         WebDriverWait(self.driver, 1, 0.1).until(
-            EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chat-title') and normalize-space()='bot1']"))
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chatbox-title') and normalize-space()='bot1']"))
         )
             
     def focusMucConversation(self):
@@ -207,21 +209,21 @@ class Test:
         
         for i in range(5):
             try:
-                user_handle = WebDriverWait(self.driver, 1, 0.1).until(
+                muc_handle = WebDriverWait(self.driver, 1, 0.1).until(
                     EC.presence_of_element_located((By.XPATH, "//a[normalize-space()='testmuc']"))
                 )
-                user_handle.click()
+                muc_handle.click()
                 
                 succeed = True
                 break
-            except StaleElementReferenceException:
+            except (StaleElementReferenceException,):
                 pass # "The element reference is stale"
                 
         if not succeed:
             raise Exception("Could not open muc conversation window")
             
         WebDriverWait(self.driver, 1, 0.1).until(
-            EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chat-title') and normalize-space()='testmuc']"))
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chatbox-title') and normalize-space()='testmuc']"))
         )
      
     def checkPrivateMessage(self, message, wait = 5):
@@ -263,9 +265,9 @@ test.initialize()
 try:
     test.connect()
     
-    start_count = 1
+    start_count = 50
 
-    for i in range(25):
+    for i in range(10):
         test.test_online(start_count)
         test.test_offline(start_count + i)
 finally:
