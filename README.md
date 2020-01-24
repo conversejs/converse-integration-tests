@@ -78,7 +78,7 @@ Install Converse.js in `/var/www/converse` and give it the configuration you wan
         default_domain: "xmppdev.example.com",
         view_mode: "fullscreen",
         enable_smacks: true,
-        archived_messages_page_size: 2, # make it easier to uncover mam paging issues
+        archived_messages_page_size: 5, # make it easier to uncover mam paging issues
         
     };
 

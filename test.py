@@ -7,7 +7,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
 
-
 from xmppclient import *
 
 from time import sleep
@@ -265,10 +264,14 @@ test.initialize()
 try:
     test.connect()
     
-    start_count = 50
+    # warm the local cache with 1 message. this will ensure that, as long as clear_messages_on_reconnection is not set,
+    # all missed messages will be fetched upon reconnect. see https://github.com/conversejs/converse.js/issues/1807
+    test.test_online(1)
+    
+    start_count = 10
 
     for i in range(10):
-        test.test_online(start_count)
+        test.test_online(start_count + i)
         test.test_offline(start_count + i)
 finally:
     test.cleanup()
