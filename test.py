@@ -60,16 +60,16 @@ class Test:
         
         self.wait_for_online()
         
+        # XXX: otherwise some kind of weird "cant click this" error, fix with proper wait
+        print "We are online! Waiting 1 second before commencing"
+        sleep(1)
+        
     def wait_for_online(self):
         status_element = WebDriverWait(self.driver, 5).until(
             EC.presence_of_element_located((By.CLASS_NAME, "xmpp-status"))
         )
 
         assert "I am online" == status_element.text
-
-        # XXX: otherwise some kind of weird "cant click this" error, fix with proper wait
-        print "We are online! Waiting 1 second before commencing"
-        sleep(1)
 
     def cleanup(self):
         self.driver.save_screenshot("screenshots/end.png")
@@ -78,6 +78,33 @@ class Test:
         self.driver.close()
 
         self.start_nginx()
+        
+    def test_reload(self, count = 1):
+        print "Testing %s online messages with reload inbetween" %(count)
+        
+        private_messages = []
+        muc_messages = []
+
+        for i in range(count / 2):
+            private_messages.append(self.sendPrivateMessage())
+            
+        for i in range(count / 2):
+            muc_messages.append(self.sendMucMessage())
+            
+        # reload page
+        self.driver.refresh()
+        
+        for i in range(count / 2):
+            private_messages.append(self.sendPrivateMessage())
+            
+        for i in range(count / 2):
+            muc_messages.append(self.sendMucMessage())
+            
+        self.sendPrivateMessage('-----')
+            
+        self.wait_for_online()
+            
+        self.checkMessages(private_messages, muc_messages)
             
     def test_online(self, count = 1):
         delay = random.randint(self.MIN_DELAY, self.MAX_DELAY)
@@ -273,5 +300,6 @@ try:
     for i in range(10):
         test.test_online(start_count + i)
         test.test_offline(start_count + i)
+        test.test_reload(start_count + i)
 finally:
     test.cleanup()
