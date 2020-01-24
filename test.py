@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import ElementNotInteractableException
 
 from xmppclient import *
 
@@ -33,7 +34,7 @@ class Test:
         os.system("sudo /opt/ejabberd-19.09.1/bin/ejabberdctl delete_old_mam_messages all 0")
         os.system("sudo service nginx start")
         os.system("killall geckodriver")
-        os.system("rm screenshots/*.png")
+        os.system("rm screenshots/*")
         os.system("rm geckodriver.log")
         os.system("ps aux|grep Xvfb|grep -v grep > /dev/null || Xvfb :10 -ac &")
         
@@ -212,7 +213,7 @@ class Test:
             try:
                 # as of converse 6, all roster entries are duplicated in the DOM; once for online, once for offline..?!
                 # make sure to select the div with class="roster-group" and *NOT* the one with class="roster-group hidden"
-                user_handle = WebDriverWait(self.driver, 1, 0.1).until(
+                user_handle = WebDriverWait(self.driver, 2, 0.1).until(
                     EC.presence_of_element_located((By.XPATH, "//div[@class='roster-group']//span[contains(@class, 'contact-name') and normalize-space()='bot1']"))
                 )
                 
@@ -220,7 +221,7 @@ class Test:
                 
                 succeed = True
                 break
-            except (StaleElementReferenceException, ):
+            except (StaleElementReferenceException, ElementNotInteractableException):
                 pass # "The element reference is stale"
                 
         if not succeed:
@@ -242,13 +243,13 @@ class Test:
                 
                 succeed = True
                 break
-            except (StaleElementReferenceException,):
+            except (StaleElementReferenceException, ElementNotInteractableException):
                 pass # "The element reference is stale"
                 
         if not succeed:
             raise Exception("Could not open muc conversation window")
             
-        WebDriverWait(self.driver, 1, 0.1).until(
+        WebDriverWait(self.driver, 2, 0.1).until(
             EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chatbox-title') and normalize-space()='testmuc']"))
         )
      
@@ -301,5 +302,12 @@ try:
         test.test_online(start_count + i)
         test.test_offline(start_count + i)
         test.test_reload(start_count + i)
+except:
+    dom = test.driver.execute_script("return document.documentElement.outerHTML")
+    text_file = open("screenshots/dom.html", "w")
+    text_file.write(dom)
+    text_file.close()
+    
+    raise
 finally:
     test.cleanup()
