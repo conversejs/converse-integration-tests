@@ -1,5 +1,6 @@
 import sleekxmpp
 import logging
+from threading import Event
 
 class XmppClient(sleekxmpp.ClientXMPP):
 
@@ -8,6 +9,8 @@ class XmppClient(sleekxmpp.ClientXMPP):
         
         self.MUC = muc
         self.NICKNAME = nickname
+        
+        self.connected = Event()
         
         # logging.basicConfig(level=logging.DEBUG, format='%(levelname)-8s %(message)s')
         self.register_plugin('xep_0045')
@@ -18,7 +21,8 @@ class XmppClient(sleekxmpp.ClientXMPP):
     def start(self, event):
         self.send_presence()
         self.get_roster()
-        self.plugin['xep_0045'].joinMUC(self.MUC, self.NICKNAME)
+        self.plugin['xep_0045'].joinMUC(self.MUC, self.NICKNAME, wait=True)
+        self.connected.set()
 
     def on_message(self, msg):
         print "RECEIVED %s" %(msg)

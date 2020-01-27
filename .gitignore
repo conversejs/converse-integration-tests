@@ -1,4 +1,4 @@
 *.pyc
-*.png
 *.log
 config.ini
+screenshots/*

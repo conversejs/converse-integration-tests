@@ -11,9 +11,11 @@ from selenium.common.exceptions import ElementNotInteractableException
 from xmppclient import *
 
 from time import sleep
+
 import os
 import uuid
 import random
+import datetime
 import ConfigParser
 
 class Test:
@@ -41,10 +43,18 @@ class Test:
         os.environ['DISPLAY'] = ':10'
 
     def connect(self):
+        self.connect_xmpp()
+        self.connect_converse()
+        
+    def connect_xmpp(self):
         self.xmpp_client = XmppClient(self.BOT_JID, self.BOT_PASS, self.MUC, 'bot1')
         self.xmpp_client.connect()
         self.xmpp_client.process(block=False)
-
+        self.xmpp_client.connected.wait()
+        
+        self.log("XMPP connected")
+        
+    def connect_converse(self):
         self.driver = webdriver.Firefox()
         self.driver.set_window_size(1000,1500)
         
@@ -61,9 +71,7 @@ class Test:
         
         self.wait_for_online()
         
-        # XXX: otherwise some kind of weird "cant click this" error, fix with proper wait
-        print "We are online! Waiting 1 second before commencing"
-        sleep(1)
+        self.log("Logged into Converse")
         
     def wait_for_online(self):
         status_element = WebDriverWait(self.driver, 5).until(
@@ -80,8 +88,22 @@ class Test:
 
         self.start_nginx()
         
+    def test_regular(self, count = 1):
+        self.log("Testing %s messages" %(count))
+        
+        private_messages = []
+        muc_messages = []
+
+        for i in range(count):
+            private_messages.append(self.sendPrivateMessage())
+            
+        for i in range(count):
+            muc_messages.append(self.sendMucMessage())
+            
+        self.checkMessages(private_messages, muc_messages)
+        
     def test_reload(self, count = 1):
-        print "Testing %s online messages with reload inbetween" %(count)
+        self.log("Testing %s online messages with reload inbetween" %(count))
         
         private_messages = []
         muc_messages = []
@@ -109,7 +131,7 @@ class Test:
             
     def test_online(self, count = 1):
         delay = random.randint(self.MIN_DELAY, self.MAX_DELAY)
-        print "Testing %s online messages with disconnect delay %i.." %(count, delay)
+        self.log("Testing %s online messages with disconnect delay %i.." %(count, delay))
         
         self.stop_nginx()
         sleep(delay)
@@ -132,7 +154,7 @@ class Test:
             
     def test_offline(self, count = 1):
         delay = random.randint(self.MIN_DELAY + 1, self.MAX_DELAY)
-        print "Testing %s offline messages with disconnect delay %i.." %(count, delay)
+        self.log("Testing %s offline messages with disconnect delay %i.." %(count, delay))
         
         self.stop_nginx()
         sleep(delay / 2)
@@ -188,7 +210,7 @@ class Test:
 
         for i, message in enumerate(messages):
             # for the first message after reconnection, allow up to 30 seconds
-            wait = 30 if i == 0 else 5
+            wait = 30 if i == 0 else 10
             self.checkPrivateMessage(message, wait)
             
         # converse can randomly jump around windows on reconnection, but we want a proper screenshot
@@ -253,7 +275,7 @@ class Test:
             EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'chatbox-title') and normalize-space()='testmuc']"))
         )
      
-    def checkPrivateMessage(self, message, wait = 5):
+    def checkPrivateMessage(self, message, wait = 10):
         try:
             WebDriverWait(self.driver, wait, 0.1).until(
                 EC.presence_of_element_located((By.XPATH, "//div[text()='%s']" %(message)))
@@ -261,7 +283,7 @@ class Test:
         except:
             raise Exception("Private message %s was not received" %(message))
                 
-    def checkMucMessage(self, message, wait = 5):
+    def checkMucMessage(self, message, wait = 10):
         try:
             WebDriverWait(self.driver, wait, 0.1).until(
                 EC.presence_of_element_located((By.XPATH, "//div[normalize-space()='%s']" %(message)))
@@ -286,6 +308,10 @@ class Test:
     def start_nginx(self):
         os.system("sudo service nginx start")
         
+    def log(self, message):
+        now = datetime.datetime.now()
+        print "[%s] %s" %(now.strftime("%H:%I:%S"), message)
+        
 test = Test()
 test.initialize()
 
@@ -294,7 +320,7 @@ try:
     
     # warm the local cache with 1 message. this will ensure that, as long as clear_messages_on_reconnection is not set,
     # all missed messages will be fetched upon reconnect. see https://github.com/conversejs/converse.js/issues/1807
-    test.test_online(1)
+    test.test_regular()
     
     start_count = 10
 
